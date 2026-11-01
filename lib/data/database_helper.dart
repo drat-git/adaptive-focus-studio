@@ -2,6 +2,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/focus_preset.dart';
+import '../models/session_log.dart';
 
 class DatabaseHelper {
   static final instance = DatabaseHelper();
@@ -149,6 +150,132 @@ class DatabaseHelper {
       limit: 1,
     );
     return rows.isNotEmpty;
+  }
+
+  Future<int> insertSessionLog(SessionLog log) async {
+    if (log.id != null) {
+      throw ArgumentError.value(
+        log.id,
+        'id',
+        'New sessions cannot have an ID.',
+      );
+    }
+    if (log.source == 'edited_timer') {
+      throw ArgumentError('Only an existing timer session can be corrected.');
+    }
+    if (log.source == 'manual') {
+      final error = SessionLog.validateManualStartedAt(
+        log.startedAt,
+        now: DateTime.now().toUtc().millisecondsSinceEpoch,
+      );
+      if (error != null) {
+        throw ArgumentError.value(log.startedAt, 'startedAt', error);
+      }
+    }
+    final db = await database;
+    return db.insert(
+      'session_logs',
+      log.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  Future<List<SessionLog>> getSessionLogs({String? moodTag}) async {
+    if (moodTag != null && FocusPreset.validateMoodTag(moodTag) != null) {
+      throw ArgumentError.value(moodTag, 'moodTag', 'Choose a valid mood.');
+    }
+    final db = await database;
+    final rows = await db.query(
+      'session_logs',
+      where: moodTag == null ? null : 'mood_tag_snapshot = ?',
+      whereArgs: moodTag == null ? null : [moodTag],
+      orderBy: 'started_at_ms DESC, id DESC',
+    );
+    return rows.map((row) => SessionLog.fromMap(row)).toList();
+  }
+
+  Future<SessionLog?> getSessionLog(int id) async {
+    if (id <= 0) {
+      throw ArgumentError.value(id, 'id', 'Use a positive saved ID.');
+    }
+    final db = await database;
+    final rows = await db.query(
+      'session_logs',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return SessionLog.fromMap(rows.single);
+  }
+
+  Future<int> updateSessionLog(SessionLog log) async {
+    final id = log.id;
+    if (id == null) throw ArgumentError('Choose a saved session to update.');
+    final db = await database;
+    return db.transaction((transaction) async {
+      final rows = await transaction.query(
+        'session_logs',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return 0;
+      final saved = SessionLog.fromMap(rows.single);
+      if (log.presetId != saved.presetId) {
+        throw ArgumentError('A saved session must keep its original preset.');
+      }
+      if (log.plannedSecondsSnapshot != saved.plannedSecondsSnapshot) {
+        throw ArgumentError('A saved session must keep its planned duration.');
+      }
+      if (log.startedAt != saved.startedAt) {
+        final error = SessionLog.validateManualStartedAt(
+          log.startedAt,
+          now: DateTime.now().toUtc().millisecondsSinceEpoch,
+        );
+        if (error != null) {
+          throw ArgumentError.value(log.startedAt, 'startedAt', error);
+        }
+      }
+      final values = log.toMap();
+      values.remove('id');
+      values['source'] = saved.source == 'manual' ? 'manual' : 'edited_timer';
+      return transaction.update(
+        'session_logs',
+        values,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
+  }
+
+  Future<int> deleteSessionLog(int id) async {
+    if (id <= 0) {
+      throw ArgumentError.value(id, 'id', 'Use a positive saved ID.');
+    }
+    final db = await database;
+    return db.delete('session_logs', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<Map<String, Object?>> getSessionSummary({String? moodTag}) async {
+    if (moodTag != null && FocusPreset.validateMoodTag(moodTag) != null) {
+      throw ArgumentError.value(moodTag, 'moodTag', 'Choose a valid mood.');
+    }
+    final db = await database;
+    final arguments = <Object?>['finished', 0, 7200];
+    if (moodTag != null) arguments.add(moodTag);
+    final rows = await db.rawQuery('''
+      SELECT COUNT(*) AS count, AVG(completed_seconds) AS average_seconds
+      FROM session_logs
+      WHERE status = ? AND typeof(completed_seconds) = 'integer'
+        AND completed_seconds BETWEEN ? AND ?
+        ${moodTag == null ? '' : 'AND mood_tag_snapshot = ?'}
+      ''', arguments);
+    final row = rows.single;
+    return {
+      'count': row['count'] as int,
+      'averageSeconds': (row['average_seconds'] as num?)?.toDouble(),
+    };
   }
 
   // The app owner closes after pending work; screens share the connection.
