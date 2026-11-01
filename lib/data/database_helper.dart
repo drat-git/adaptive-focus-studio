@@ -1,6 +1,8 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../models/focus_preset.dart';
+
 class DatabaseHelper {
   static final instance = DatabaseHelper();
 
@@ -74,6 +76,64 @@ class DatabaseHelper {
         ''');
       },
     );
+  }
+
+  Future<int> insertPreset(FocusPreset preset) async {
+    if (preset.id != null) {
+      throw ArgumentError.value(
+        preset.id,
+        'id',
+        'New presets cannot have an ID.',
+      );
+    }
+    final db = await database;
+    return db.insert(
+      'focus_presets',
+      preset.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  Future<List<FocusPreset>> getPresets() async {
+    final db = await database;
+    final rows = await db.query('focus_presets', orderBy: 'id ASC');
+    return rows.map((row) => FocusPreset.fromMap(row)).toList();
+  }
+
+  Future<FocusPreset?> getPreset(int id) async {
+    if (id <= 0) {
+      throw ArgumentError.value(id, 'id', 'Use a positive saved ID.');
+    }
+    final db = await database;
+    final rows = await db.query(
+      'focus_presets',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    return FocusPreset.fromMap(rows.single);
+  }
+
+  Future<int> updatePreset(FocusPreset preset) async {
+    final id = preset.id;
+    if (id == null) {
+      throw ArgumentError('Choose a saved preset to update.');
+    }
+    final values = preset.toMap();
+    values.remove('id');
+    final db = await database;
+    return db.update('focus_presets', values, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deletePreset(int id) async {
+    if (id <= 0) {
+      throw ArgumentError.value(id, 'id', 'Use a positive saved ID.');
+    }
+    final db = await database;
+    return db.delete('focus_presets', where: 'id = ?', whereArgs: [id]);
   }
 
   // The app owner closes after pending work; screens share the connection.
