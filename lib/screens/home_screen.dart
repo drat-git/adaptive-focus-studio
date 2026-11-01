@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/focus_preset.dart';
 import 'focus_session_screen.dart';
 import 'history_screen.dart';
 import 'preset_editor_screen.dart';
@@ -7,7 +8,9 @@ import 'presets_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.loadPresets});
+
+  final Future<List<FocusPreset>> Function()? loadPresets;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -23,10 +26,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openFocusSession() {
+  void _openFocusSession(FocusPreset preset) {
     Navigator.push<void>(
       context,
-      MaterialPageRoute<void>(builder: (context) => const FocusSessionScreen()),
+      MaterialPageRoute<void>(
+        builder: (context) => FocusSessionScreen(preset: preset),
+      ),
     );
   }
 
@@ -35,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const titles = ['Presets', 'History', 'Settings'];
     final pages = [
       PresetsScreen(
+        loadPresets: widget.loadPresets,
         onAddPreset: _openPresetEditor,
         onOpenSession: _openFocusSession,
       ),

@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+String formatDuration(int seconds) {
+  final minutes = seconds ~/ 60;
+  final remaining = seconds % 60;
+  return remaining == 0 ? '$minutes min' : '$minutes min $remaining sec';
+}
+
 class SectionHeading extends StatelessWidget {
   const SectionHeading({super.key, required this.title, this.description});
 

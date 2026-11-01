@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:adaptive_focus_studio/main.dart';
+import 'package:adaptive_focus_studio/models/focus_preset.dart';
 
 void main() {
   testWidgets('Main destinations show their own content', (tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(MyApp(loadPresets: () async => []));
     expect(find.text('Study presets'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.history));
@@ -24,7 +25,14 @@ void main() {
   });
 
   testWidgets('Editor and session return to Presets', (tester) async {
-    await tester.pumpWidget(const MyApp());
+    final preset = FocusPreset(
+      id: 1,
+      label: 'Reading block',
+      moodTag: 'Calm',
+      plannedSeconds: 1500,
+    );
+    await tester.pumpWidget(MyApp(loadPresets: () async => [preset]));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Add preset'));
     await tester.pumpAndSettle();
@@ -34,9 +42,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Study presets'), findsOneWidget);
 
-    await tester.tap(find.text('View focus session'));
+    await tester.tap(find.text('Open session'));
     await tester.pumpAndSettle();
-    expect(find.text('No preset selected.'), findsOneWidget);
+    expect(find.text('Reading block'), findsOneWidget);
     final start = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Start session'),
     );
