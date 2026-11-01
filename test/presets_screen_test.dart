@@ -13,7 +13,8 @@ void main() {
         home: Scaffold(
           body: PresetsScreen(
             loadPresets: () => pending.future,
-            onAddPreset: () {},
+            onAddPreset: () async => false,
+            onEditPreset: (preset) async => false,
             onOpenSession: (preset) {},
           ),
         ),
@@ -46,7 +47,8 @@ void main() {
                 ),
               ];
             },
-            onAddPreset: () {},
+            onAddPreset: () async => false,
+            onEditPreset: (preset) async => false,
             onOpenSession: (preset) {},
           ),
         ),
@@ -82,7 +84,8 @@ void main() {
         home: Scaffold(
           body: PresetsScreen(
             loadPresets: () async => rows,
-            onAddPreset: () {},
+            onAddPreset: () async => false,
+            onEditPreset: (preset) async => false,
             onOpenSession: (preset) {
               opened = preset;
             },

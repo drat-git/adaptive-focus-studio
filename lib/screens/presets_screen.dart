@@ -9,11 +9,13 @@ class PresetsScreen extends StatefulWidget {
   const PresetsScreen({
     super.key,
     required this.onAddPreset,
+    required this.onEditPreset,
     required this.onOpenSession,
     this.loadPresets,
   });
 
-  final VoidCallback onAddPreset;
+  final Future<bool> Function() onAddPreset;
+  final Future<bool> Function(FocusPreset) onEditPreset;
   final void Function(FocusPreset) onOpenSession;
   final Future<List<FocusPreset>> Function()? loadPresets;
 
@@ -42,6 +44,13 @@ class _PresetsScreenState extends State<PresetsScreen> {
     });
   }
 
+  Future<void> _editPreset(FocusPreset? preset) async {
+    final changed = preset == null
+        ? await widget.onAddPreset()
+        : await widget.onEditPreset(preset);
+    if (changed && mounted) _retry();
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -68,7 +77,7 @@ class _PresetsScreenState extends State<PresetsScreen> {
         ),
         const SizedBox(height: 12),
         FilledButton.icon(
-          onPressed: widget.onAddPreset,
+          onPressed: () => _editPreset(null),
           icon: const Icon(Icons.add),
           label: const Text('Add preset'),
         ),
@@ -106,6 +115,7 @@ class _PresetsScreenState extends State<PresetsScreen> {
                 return PresetCard(
                   preset: preset,
                   onOpen: () => widget.onOpenSession(preset),
+                  onEdit: () => _editPreset(preset),
                 );
               }).toList(),
             );

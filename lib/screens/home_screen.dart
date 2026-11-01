@@ -19,11 +19,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  void _openPresetEditor() {
-    Navigator.push<void>(
-      context,
-      MaterialPageRoute<void>(builder: (context) => const PresetEditorScreen()),
-    );
+  Future<bool> _openPresetEditor([FocusPreset? preset]) async {
+    return await Navigator.push<bool>(
+          context,
+          MaterialPageRoute<bool>(
+            builder: (context) => PresetEditorScreen(preset: preset),
+          ),
+        ) ??
+        false;
   }
 
   void _openFocusSession(FocusPreset preset) {
@@ -41,7 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final pages = [
       PresetsScreen(
         loadPresets: widget.loadPresets,
-        onAddPreset: _openPresetEditor,
+        onAddPreset: () => _openPresetEditor(),
+        onEditPreset: _openPresetEditor,
         onOpenSession: _openFocusSession,
       ),
       const HistoryScreen(),
