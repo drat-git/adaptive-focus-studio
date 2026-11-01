@@ -26,7 +26,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   double? _averageSeconds;
   bool _loading = false;
   String? _error;
-  bool _adding = false;
+  bool _editingEntry = false;
+  bool _confirmingDelete = false;
 
   @override
   void initState() {
@@ -65,20 +66,50 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  Future<void> _addManualEntry() async {
-    if (_adding || _loading || _error != null) return;
-    _adding = true;
+  Future<void> _openEditor([SessionLog? log]) async {
+    if (_editingEntry || _loading || _error != null) return;
+    _editingEntry = true;
     final saved = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => SessionLogEditor(
         presets: _presets,
-        saveLog: _database.insertSessionLog,
+        log: log,
+        saveLog: log == null
+            ? _database.insertSessionLog
+            : _database.updateSessionLog,
         onOpenPresets: widget.onOpenPresets,
       ),
     );
-    _adding = false;
+    _editingEntry = false;
     if (mounted && saved == true) _load();
+  }
+
+  Future<void> _deleteEntry(SessionLog log) async {
+    if (_confirmingDelete) return;
+    _confirmingDelete = true;
+    final count = await showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _DeleteSessionDialog(
+        log: log,
+        description:
+            '${_presetNames[log.presetId] ?? 'Preset #${log.presetId}'} · ${_localDateTime(log.startedAt)}',
+        deleteLog: _database.deleteSessionLog,
+      ),
+    );
+    _confirmingDelete = false;
+    if (!mounted || count == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          count == 1
+              ? 'Entry deleted.'
+              : 'This entry no longer exists. Reloading history.',
+        ),
+      ),
+    );
+    _load();
   }
 
   String _localDateTime(int timestamp) {
@@ -121,6 +152,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Text(log.status == 'finished' ? 'Finished' : 'Cancelled'),
             Text('Source: ${sources[log.source]}'),
             if (log.note.isNotEmpty) Text('Note: ${log.note}'),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _openEditor(log),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _deleteEntry(log),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Delete'),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -140,7 +186,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           description: 'Review planned and completed study time.',
         ),
         FilledButton.icon(
-          onPressed: _loading || _error != null ? null : _addManualEntry,
+          onPressed: _loading || _error != null ? null : () => _openEditor(),
           icon: const Icon(Icons.add),
           label: const Text('Add manual entry'),
         ),
@@ -207,6 +253,87 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ...visible.map(_sessionCard),
         ],
       ],
+    );
+  }
+}
+
+class _DeleteSessionDialog extends StatefulWidget {
+  const _DeleteSessionDialog({
+    required this.log,
+    required this.description,
+    required this.deleteLog,
+  });
+
+  final SessionLog log;
+  final String description;
+  final Future<int> Function(int) deleteLog;
+
+  @override
+  State<_DeleteSessionDialog> createState() => _DeleteSessionDialogState();
+}
+
+class _DeleteSessionDialogState extends State<_DeleteSessionDialog> {
+  bool _pending = false;
+  String? _error;
+
+  Future<void> _delete() async {
+    if (_pending) return;
+    setState(() {
+      _pending = true;
+      _error = null;
+    });
+    try {
+      final count = await widget.deleteLog(widget.log.id!);
+      if (count != 0 && count != 1) {
+        throw StateError('Unexpected delete result.');
+      }
+      if (mounted) Navigator.pop(context, count);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _pending = false;
+        _error = 'Could not delete this entry. Try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope<int>(
+      canPop: !_pending,
+      child: AlertDialog(
+        title: Text('Delete entry #${widget.log.id}?'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.description),
+              const SizedBox(height: 12),
+              const Text(
+                'This permanently removes the session entry. The preset will be kept.',
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _pending ? null : () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _pending ? null : _delete,
+            child: Text(_pending ? 'Deleting…' : 'Delete entry'),
+          ),
+        ],
+      ),
     );
   }
 }

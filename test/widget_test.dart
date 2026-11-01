@@ -48,7 +48,7 @@ void main() {
     final start = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Start session'),
     );
-    expect(start.onPressed, isNull);
+    expect(start.onPressed, isNotNull);
 
     await tester.pageBack();
     await tester.pumpAndSettle();

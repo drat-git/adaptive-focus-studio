@@ -9,12 +9,14 @@ class SessionLogEditor extends StatefulWidget {
   const SessionLogEditor({
     super.key,
     required this.presets,
+    this.log,
     this.saveLog,
     this.onOpenPresets,
     this.now,
   });
 
   final List<FocusPreset> presets;
+  final SessionLog? log;
   final Future<int> Function(SessionLog)? saveLog;
   final VoidCallback? onOpenPresets;
   final DateTime Function()? now;
@@ -35,11 +37,15 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
   late DateTime _dateTime;
   late final DateTime _initialDateTime;
   bool _saving = false;
+  bool _missing = false;
   bool _confirmingDiscard = false;
   String? _dateError;
   String? _error;
 
   DateTime _now() => widget.now?.call() ?? DateTime.now();
+  bool get _editing => widget.log != null;
+  bool get _enabled => !_saving && !_missing;
+  bool get _noPresets => !_editing && widget.presets.isEmpty;
 
   FocusPreset? get _preset {
     for (final preset in widget.presets) {
@@ -51,28 +57,40 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
   bool get _hasChanges {
     return _presetId != _initialPresetId ||
         _mood != _initialMood ||
-        _status != 'finished' ||
+        _status != (widget.log?.status ?? 'finished') ||
         _dateTime != _initialDateTime ||
-        _completed.text.isNotEmpty ||
-        _note.text.isNotEmpty;
+        _completed.text != (widget.log?.completedSeconds.toString() ?? '') ||
+        _note.text != (widget.log?.note ?? '');
   }
 
   @override
   void initState() {
     super.initState();
-    if (widget.presets.isNotEmpty) {
+    final log = widget.log;
+    if (log != null) {
+      _presetId = log.presetId;
+      _mood = log.moodTagSnapshot;
+      _status = log.status;
+      _completed.text = log.completedSeconds.toString();
+      _note.text = log.note;
+    } else if (widget.presets.isNotEmpty) {
       _presetId = widget.presets.first.id;
-      _initialPresetId = _presetId;
       _mood = widget.presets.first.moodTag;
-      _initialMood = _mood;
     }
+    _initialPresetId = _presetId;
+    _initialMood = _mood;
     final now = _now().toLocal();
-    _dateTime = DateTime(now.year, now.month, now.day, now.hour, now.minute);
+    _dateTime = log == null
+        ? DateTime(now.year, now.month, now.day, now.hour, now.minute)
+        : DateTime.fromMillisecondsSinceEpoch(
+            log.startedAt,
+            isUtc: true,
+          ).toLocal();
     _initialDateTime = _dateTime;
   }
 
   Future<void> _chooseDate() async {
-    if (_saving) return;
+    if (!_enabled) return;
     final now = _now().toLocal();
     final today = DateTime(now.year, now.month, now.day);
     final chosen = await showDatePicker(
@@ -83,6 +101,11 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
       currentDate: now,
     );
     if (!mounted || chosen == null) return;
+    if (chosen.year == _dateTime.year &&
+        chosen.month == _dateTime.month &&
+        chosen.day == _dateTime.day) {
+      return;
+    }
     setState(() {
       _dateTime = DateTime(
         chosen.year,
@@ -90,18 +113,24 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
         chosen.day,
         _dateTime.hour,
         _dateTime.minute,
+        _dateTime.second,
+        _dateTime.millisecond,
+        _dateTime.microsecond,
       );
       _dateError = null;
     });
   }
 
   Future<void> _chooseTime() async {
-    if (_saving) return;
+    if (!_enabled) return;
     final chosen = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(_dateTime),
     );
     if (!mounted || chosen == null) return;
+    if (chosen.hour == _dateTime.hour && chosen.minute == _dateTime.minute) {
+      return;
+    }
     setState(() {
       _dateTime = DateTime(
         _dateTime.year,
@@ -109,6 +138,9 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
         _dateTime.day,
         chosen.hour,
         chosen.minute,
+        _dateTime.second,
+        _dateTime.millisecond,
+        _dateTime.microsecond,
       );
       _dateError = null;
     });
@@ -116,6 +148,10 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
 
   Future<void> _requestClose() async {
     if (_saving || _confirmingDiscard) return;
+    if (_missing) {
+      Navigator.pop(context, true);
+      return;
+    }
     if (_hasChanges) {
       _confirmingDiscard = true;
       final discard = await showDialog<bool>(
@@ -148,23 +184,33 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
   }
 
   Future<void> _save() async {
-    if (_saving || widget.presets.isEmpty) return;
+    if (!_enabled || _noPresets) return;
+    if (_editing && !_hasChanges) {
+      Navigator.pop(context, false);
+      return;
+    }
     final valid = _formKey.currentState!.validate();
-    final dateError = SessionLog.validateManualStartedAt(
-      _dateTime.toUtc().millisecondsSinceEpoch,
-      now: _now().toUtc().millisecondsSinceEpoch,
-    );
+    final timestamp = _dateTime.toUtc().millisecondsSinceEpoch;
+    final dateError = widget.log?.startedAt == timestamp
+        ? null
+        : SessionLog.validateManualStartedAt(
+            timestamp,
+            now: _now().toUtc().millisecondsSinceEpoch,
+          );
     setState(() => _dateError = dateError);
     if (!valid || dateError != null) return;
-    final preset = _preset!;
     final log = SessionLog(
-      presetId: preset.id!,
-      startedAt: _dateTime.toUtc().millisecondsSinceEpoch,
-      plannedSecondsSnapshot: preset.plannedSeconds,
+      id: widget.log?.id,
+      presetId: widget.log?.presetId ?? _preset!.id!,
+      startedAt: timestamp,
+      plannedSecondsSnapshot:
+          widget.log?.plannedSecondsSnapshot ?? _preset!.plannedSeconds,
       completedSeconds: int.parse(_completed.text.trim()),
       moodTagSnapshot: _mood,
       status: _status,
-      source: 'manual',
+      source: widget.log == null || widget.log!.source == 'manual'
+          ? 'manual'
+          : 'edited_timer',
       note: _note.text,
     );
     setState(() {
@@ -172,9 +218,24 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
       _error = null;
     });
     try {
-      final saver = widget.saveLog ?? DatabaseHelper.instance.insertSessionLog;
-      final id = await saver(log);
-      if (id <= 0) throw StateError('The entry was not saved.');
+      final saver =
+          widget.saveLog ??
+          (_editing
+              ? DatabaseHelper.instance.updateSessionLog
+              : DatabaseHelper.instance.insertSessionLog);
+      final result = await saver(log);
+      if (!mounted) return;
+      if (_editing && result == 0) {
+        setState(() {
+          _saving = false;
+          _missing = true;
+          _error = 'This entry no longer exists. Return to History to refresh.';
+        });
+        return;
+      }
+      if (result <= 0 || (_editing && result != 1)) {
+        throw StateError('The entry was not saved.');
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
       if (!mounted) return;
@@ -196,15 +257,15 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
   Widget build(BuildContext context) {
     final labels = MaterialLocalizations.of(context);
     return PopScope<bool>(
-      canPop: !_saving && !_hasChanges,
+      canPop: !_saving && !_hasChanges && !_missing,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && !_saving) _requestClose();
       },
       child: AlertDialog(
-        title: const Text('Manual session entry'),
+        title: Text(_editing ? 'Edit session entry' : 'Manual session entry'),
         content: SizedBox(
           width: 440,
-          child: widget.presets.isEmpty
+          child: _noPresets
               ? const Text(
                   'Create a preset in Presets, then return to add a session entry.',
                 )
@@ -224,36 +285,42 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
                           ),
                           const SizedBox(height: 12),
                         ],
-                        DropdownButtonFormField<int>(
-                          initialValue: _presetId,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Preset',
-                          ),
-                          items: widget.presets
-                              .map(
-                                (preset) => DropdownMenuItem(
-                                  value: preset.id,
-                                  child: Text(
-                                    '${preset.label} (#${preset.id})',
+                        if (_editing)
+                          Text(
+                            'Preset: ${_preset?.label ?? 'Unavailable preset'} (#$_presetId)',
+                          )
+                        else
+                          DropdownButtonFormField<int>(
+                            initialValue: _presetId,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Preset',
+                            ),
+                            items: widget.presets
+                                .map(
+                                  (preset) => DropdownMenuItem(
+                                    value: preset.id,
+                                    child: Text(
+                                      '${preset.label} (#${preset.id})',
+                                    ),
                                   ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: _saving
-                              ? null
-                              : (id) {
-                                  setState(() {
-                                    _presetId = id;
-                                    _mood = _preset?.moodTag ?? 'Calm';
-                                  });
-                                },
-                          validator: (_) =>
-                              _preset == null ? 'Choose a saved preset.' : null,
-                        ),
+                                )
+                                .toList(),
+                            onChanged: !_enabled
+                                ? null
+                                : (id) {
+                                    setState(() {
+                                      _presetId = id;
+                                      _mood = _preset?.moodTag ?? 'Calm';
+                                    });
+                                  },
+                            validator: (_) => _preset == null
+                                ? 'Choose a saved preset.'
+                                : null,
+                          ),
                         const SizedBox(height: 8),
                         Text(
-                          'Planned snapshot: ${formatDuration(_preset?.plannedSeconds ?? 1500)}',
+                          'Planned snapshot: ${formatDuration(widget.log?.plannedSecondsSnapshot ?? _preset!.plannedSeconds)}',
                         ),
                         const SizedBox(height: 16),
                         const Text('Local date and time'),
@@ -262,13 +329,13 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
                           children: [
                             OutlinedButton.icon(
                               key: const Key('session-date'),
-                              onPressed: _saving ? null : _chooseDate,
+                              onPressed: _enabled ? _chooseDate : null,
                               icon: const Icon(Icons.calendar_today_outlined),
                               label: Text(labels.formatMediumDate(_dateTime)),
                             ),
                             OutlinedButton.icon(
                               key: const Key('session-time'),
-                              onPressed: _saving ? null : _chooseTime,
+                              onPressed: _enabled ? _chooseTime : null,
                               icon: const Icon(Icons.schedule),
                               label: Text(
                                 labels.formatTimeOfDay(
@@ -292,7 +359,7 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _completed,
-                          enabled: !_saving,
+                          enabled: _enabled,
                           decoration: const InputDecoration(
                             labelText: 'Completed seconds',
                             helperText: 'Enter 0 to 7200 seconds.',
@@ -316,7 +383,7 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
                                 ),
                               )
                               .toList(),
-                          onChanged: _saving
+                          onChanged: !_enabled
                               ? null
                               : (mood) {
                                   if (mood != null) {
@@ -344,7 +411,7 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
                                 ),
                               )
                               .toList(),
-                          onChanged: _saving
+                          onChanged: !_enabled
                               ? null
                               : (status) {
                                   if (status != null) {
@@ -355,7 +422,7 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _note,
-                          enabled: !_saving,
+                          enabled: _enabled,
                           maxLines: 3,
                           decoration: const InputDecoration(
                             labelText: 'Optional note',
@@ -366,7 +433,14 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
                           onChanged: (_) => setState(() {}),
                         ),
                         const SizedBox(height: 12),
-                        const Text('Source: Manual entry'),
+                        Text(
+                          widget.log == null || widget.log!.source == 'manual'
+                              ? 'Source: Manual entry'
+                              : widget.log!.source == 'edited_timer' ||
+                                    _hasChanges
+                              ? 'Source after save: Corrected timer'
+                              : 'Source: Measured timer',
+                        ),
                       ],
                     ),
                   ),
@@ -375,9 +449,15 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
         actions: [
           TextButton(
             onPressed: _saving ? null : _requestClose,
-            child: Text(widget.presets.isEmpty ? 'Close' : 'Cancel'),
+            child: Text(
+              _missing
+                  ? 'Return to History'
+                  : _noPresets
+                  ? 'Close'
+                  : 'Cancel',
+            ),
           ),
-          if (widget.presets.isEmpty && widget.onOpenPresets != null)
+          if (_noPresets && widget.onOpenPresets != null)
             FilledButton(
               onPressed: () {
                 Navigator.pop(context, false);
@@ -385,9 +465,9 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
               },
               child: const Text('Open Presets'),
             ),
-          if (widget.presets.isNotEmpty)
+          if (!_noPresets)
             FilledButton(
-              onPressed: _saving ? null : _save,
+              onPressed: _enabled ? _save : null,
               child: Text(_saving ? 'Saving…' : 'Save entry'),
             ),
         ],
