@@ -6,7 +6,12 @@ import 'package:adaptive_focus_studio/models/focus_preset.dart';
 
 void main() {
   testWidgets('Main destinations show their own content', (tester) async {
-    await tester.pumpWidget(MyApp(loadPresets: () async => []));
+    await tester.pumpWidget(
+      MyApp(
+        loadSummary: (_) async => {'count': 0, 'averageSeconds': null},
+        loadPresets: () async => [],
+      ),
+    );
     expect(find.text('Study presets'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.history));
@@ -31,7 +36,12 @@ void main() {
       moodTag: 'Calm',
       plannedSeconds: 1500,
     );
-    await tester.pumpWidget(MyApp(loadPresets: () async => [preset]));
+    await tester.pumpWidget(
+      MyApp(
+        loadSummary: (_) async => {'count': 0, 'averageSeconds': null},
+        loadPresets: () async => [preset],
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Add preset'));
@@ -42,6 +52,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Study presets'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Open session'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Open session'));
     await tester.pumpAndSettle();
     expect(find.text('Reading block'), findsOneWidget);
@@ -52,6 +64,7 @@ void main() {
 
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Study presets'), findsOneWidget);
+    expect(find.text('Open session'), findsOneWidget);
+    expect(find.text('Start session'), findsNothing);
   });
 }

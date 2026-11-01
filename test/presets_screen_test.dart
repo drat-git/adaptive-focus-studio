@@ -12,10 +12,11 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: PresetsScreen(
+            loadSummary: (_) async => {'count': 0, 'averageSeconds': null},
             loadPresets: () => pending.future,
             onAddPreset: () async => false,
             onEditPreset: (preset) async => false,
-            onOpenSession: (preset) {},
+            onOpenSession: (preset) async => false,
           ),
         ),
       ),
@@ -35,6 +36,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: PresetsScreen(
+            loadSummary: (_) async => {'count': 0, 'averageSeconds': null},
             loadPresets: () async {
               calls++;
               if (calls == 1) throw StateError('Read failed');
@@ -49,7 +51,7 @@ void main() {
             },
             onAddPreset: () async => false,
             onEditPreset: (preset) async => false,
-            onOpenSession: (preset) {},
+            onOpenSession: (preset) async => false,
           ),
         ),
       ),
@@ -83,11 +85,13 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: PresetsScreen(
+            loadSummary: (_) async => {'count': 0, 'averageSeconds': null},
             loadPresets: () async => rows,
             onAddPreset: () async => false,
             onEditPreset: (preset) async => false,
-            onOpenSession: (preset) {
+            onOpenSession: (preset) async {
               opened = preset;
+              return false;
             },
           ),
         ),
@@ -100,6 +104,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Reading'), findsNothing);
     expect(find.text('Lab notes'), findsOneWidget);
+    await tester.ensureVisible(find.text('Open session'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Open session'));
     expect(opened?.id, 4);
   });

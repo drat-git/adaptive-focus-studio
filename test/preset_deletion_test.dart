@@ -24,17 +24,20 @@ Future<void> showPresets(
     MaterialApp(
       home: Scaffold(
         body: PresetsScreen(
+          loadSummary: (_) async => {'count': 0, 'averageSeconds': null},
           loadPresets: loadPresets ?? () async => [preset],
           deletePreset: deletePreset,
           presetHasLogs: presetHasLogs,
           onAddPreset: () async => false,
           onEditPreset: (_) async => false,
-          onOpenSession: (_) {},
+          onOpenSession: (_) async => false,
           onOpenHistory: onOpenHistory,
         ),
       ),
     ),
   );
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(find.text('Delete'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Delete'));
   await tester.pumpAndSettle();

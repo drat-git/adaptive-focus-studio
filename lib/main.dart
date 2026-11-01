@@ -9,16 +9,17 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, this.loadPresets});
+  const MyApp({super.key, this.loadPresets, this.loadSummary});
 
   final Future<List<FocusPreset>> Function()? loadPresets;
+  final Future<Map<String, Object?>> Function(String? moodTag)? loadSummary;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Adaptive Focus Studio',
       theme: buildAppTheme(),
-      home: HomeScreen(loadPresets: loadPresets),
+      home: HomeScreen(loadPresets: loadPresets, loadSummary: loadSummary),
     );
   }
 }

@@ -13,6 +13,7 @@ class PresetsScreen extends StatefulWidget {
     required this.onEditPreset,
     required this.onOpenSession,
     this.loadPresets,
+    this.loadSummary,
     this.deletePreset,
     this.presetHasLogs,
     this.onOpenHistory,
@@ -20,8 +21,9 @@ class PresetsScreen extends StatefulWidget {
 
   final Future<bool> Function() onAddPreset;
   final Future<bool> Function(FocusPreset) onEditPreset;
-  final void Function(FocusPreset) onOpenSession;
+  final Future<bool> Function(FocusPreset) onOpenSession;
   final Future<List<FocusPreset>> Function()? loadPresets;
+  final Future<Map<String, Object?>> Function(String? moodTag)? loadSummary;
   final Future<int> Function(int)? deletePreset;
   final Future<bool> Function(int)? presetHasLogs;
   final VoidCallback? onOpenHistory;
@@ -33,6 +35,8 @@ class PresetsScreen extends StatefulWidget {
 class _PresetsScreenState extends State<PresetsScreen> {
   late Future<List<FocusPreset>> _presets;
   String _mood = 'All moods';
+  Map<String, Object?>? _summary;
+  int _readNumber = 0;
   bool _confirmingDelete = false;
 
   @override
@@ -42,11 +46,48 @@ class _PresetsScreenState extends State<PresetsScreen> {
   }
 
   Future<List<FocusPreset>> _loadPresets() {
-    final loader = widget.loadPresets ?? DatabaseHelper.instance.getPresets;
-    final future = loader();
+    final future = _readCatalog();
     // A fast refresh can fail before FutureBuilder reaches the next frame.
     future.then<void>((_) {}, onError: (Object error, StackTrace stack) {});
     return future;
+  }
+
+  Future<List<FocusPreset>> _readCatalog() async {
+    final readNumber = ++_readNumber;
+    final moodTag = _mood == 'All moods' ? null : _mood;
+    final loader = widget.loadPresets ?? DatabaseHelper.instance.getPresets;
+    final presets = await loader();
+    final summary = widget.loadSummary == null
+        ? await DatabaseHelper.instance.getSessionSummary(moodTag: moodTag)
+        : await widget.loadSummary!(moodTag);
+    if (mounted && readNumber == _readNumber) _summary = summary;
+    return presets;
+  }
+
+  Widget _sessionSummary() {
+    final count = _summary!['count'] as int;
+    final average = _summary!['averageSeconds'] as double?;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeading(title: 'Finished session average'),
+        if (count == 0 || average == null)
+          Text(
+            _mood == 'All moods'
+                ? 'No finished sessions yet.'
+                : 'No finished sessions for this mood.',
+          )
+        else
+          Text(
+            formatDuration(average.round()),
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        Text('$count finished ${count == 1 ? 'entry' : 'entries'}'),
+        const Text(
+          'Uses mood at each session. Cancelled entries are excluded; manual and corrected entries are included.',
+        ),
+      ],
+    );
   }
 
   void _retry() {
@@ -59,6 +100,11 @@ class _PresetsScreenState extends State<PresetsScreen> {
     final changed = preset == null
         ? await widget.onAddPreset()
         : await widget.onEditPreset(preset);
+    if (changed && mounted) _retry();
+  }
+
+  Future<void> _openSession(FocusPreset preset) async {
+    final changed = await widget.onOpenSession(preset);
     if (changed && mounted) _retry();
   }
 
@@ -114,6 +160,7 @@ class _PresetsScreenState extends State<PresetsScreen> {
             if (mood != null) {
               setState(() {
                 _mood = mood;
+                _presets = _loadPresets();
               });
             }
           },
@@ -141,27 +188,28 @@ class _PresetsScreenState extends State<PresetsScreen> {
               );
             }
             final allPresets = snapshot.data!;
-            if (allPresets.isEmpty) {
-              return const Text(
-                'Add your first preset to set up a study block.',
-              );
-            }
             final visible = allPresets.where((preset) {
               return _mood == 'All moods' || preset.moodTag == _mood;
             }).toList();
-            if (visible.isEmpty) {
-              return const Text('No presets match this mood.');
-            }
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: visible.map((preset) {
-                return PresetCard(
-                  preset: preset,
-                  onOpen: () => widget.onOpenSession(preset),
-                  onEdit: () => _editPreset(preset),
-                  onDelete: () => _deletePreset(preset),
-                );
-              }).toList(),
+              children: [
+                _sessionSummary(),
+                const SizedBox(height: 24),
+                if (allPresets.isEmpty)
+                  const Text('Add your first preset to set up a study block.')
+                else if (visible.isEmpty)
+                  const Text('No presets match this mood.')
+                else
+                  ...visible.map((preset) {
+                    return PresetCard(
+                      preset: preset,
+                      onOpen: () => _openSession(preset),
+                      onEdit: () => _editPreset(preset),
+                      onDelete: () => _deletePreset(preset),
+                    );
+                  }),
+              ],
             );
           },
         ),

@@ -8,9 +8,10 @@ import 'presets_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.loadPresets});
+  const HomeScreen({super.key, this.loadPresets, this.loadSummary});
 
   final Future<List<FocusPreset>> Function()? loadPresets;
+  final Future<Map<String, Object?>> Function(String? moodTag)? loadSummary;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -30,13 +31,14 @@ class _HomeScreenState extends State<HomeScreen> {
         false;
   }
 
-  void _openFocusSession(FocusPreset preset) {
-    Navigator.push<bool>(
-      context,
-      MaterialPageRoute<bool>(
-        builder: (context) => FocusSessionScreen(preset: preset),
-      ),
-    );
+  Future<bool> _openFocusSession(FocusPreset preset) async {
+    return await Navigator.push<bool>(
+          context,
+          MaterialPageRoute<bool>(
+            builder: (context) => FocusSessionScreen(preset: preset),
+          ),
+        ) ??
+        false;
   }
 
   @override
@@ -45,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final pages = [
       PresetsScreen(
         loadPresets: widget.loadPresets,
+        loadSummary: widget.loadSummary,
         onAddPreset: () => _openPresetEditor(),
         onEditPreset: _openPresetEditor,
         onOpenSession: _openFocusSession,
