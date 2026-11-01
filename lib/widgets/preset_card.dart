@@ -9,11 +9,13 @@ class PresetCard extends StatelessWidget {
     required this.preset,
     required this.onOpen,
     required this.onEdit,
+    required this.onDelete,
   });
 
   final FocusPreset preset;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +47,11 @@ class PresetCard extends StatelessWidget {
                     onPressed: onEdit,
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Edit'),
+                  ),
+                  TextButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Delete'),
                   ),
                 ],
               ),

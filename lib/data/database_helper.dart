@@ -136,6 +136,21 @@ class DatabaseHelper {
     return db.delete('focus_presets', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<bool> presetHasLogs(int id) async {
+    if (id <= 0) {
+      throw ArgumentError.value(id, 'id', 'Use a positive saved ID.');
+    }
+    final db = await database;
+    final rows = await db.query(
+      'session_logs',
+      columns: ['id'],
+      where: 'preset_id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
   // The app owner closes after pending work; screens share the connection.
   Future<void> close() async {
     if (_closing != null) {

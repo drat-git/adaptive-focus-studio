@@ -47,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onAddPreset: () => _openPresetEditor(),
         onEditPreset: _openPresetEditor,
         onOpenSession: _openFocusSession,
+        onOpenHistory: () => setState(() => _selectedIndex = 1),
       ),
       const HistoryScreen(),
       const SettingsScreen(),

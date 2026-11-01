@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../data/database_helper.dart';
 import '../models/focus_preset.dart';
@@ -12,12 +13,18 @@ class PresetsScreen extends StatefulWidget {
     required this.onEditPreset,
     required this.onOpenSession,
     this.loadPresets,
+    this.deletePreset,
+    this.presetHasLogs,
+    this.onOpenHistory,
   });
 
   final Future<bool> Function() onAddPreset;
   final Future<bool> Function(FocusPreset) onEditPreset;
   final void Function(FocusPreset) onOpenSession;
   final Future<List<FocusPreset>> Function()? loadPresets;
+  final Future<int> Function(int)? deletePreset;
+  final Future<bool> Function(int)? presetHasLogs;
+  final VoidCallback? onOpenHistory;
 
   @override
   State<PresetsScreen> createState() => _PresetsScreenState();
@@ -26,6 +33,7 @@ class PresetsScreen extends StatefulWidget {
 class _PresetsScreenState extends State<PresetsScreen> {
   late Future<List<FocusPreset>> _presets;
   String _mood = 'All moods';
+  bool _confirmingDelete = false;
 
   @override
   void initState() {
@@ -35,7 +43,10 @@ class _PresetsScreenState extends State<PresetsScreen> {
 
   Future<List<FocusPreset>> _loadPresets() {
     final loader = widget.loadPresets ?? DatabaseHelper.instance.getPresets;
-    return loader();
+    final future = loader();
+    // A fast refresh can fail before FutureBuilder reaches the next frame.
+    future.then<void>((_) {}, onError: (Object error, StackTrace stack) {});
+    return future;
   }
 
   void _retry() {
@@ -49,6 +60,38 @@ class _PresetsScreenState extends State<PresetsScreen> {
         ? await widget.onAddPreset()
         : await widget.onEditPreset(preset);
     if (changed && mounted) _retry();
+  }
+
+  Future<void> _deletePreset(FocusPreset preset) async {
+    if (_confirmingDelete) return;
+    _confirmingDelete = true;
+    final result = await showDialog<_PresetDeleteResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _DeletePresetDialog(
+        preset: preset,
+        deletePreset:
+            widget.deletePreset ?? DatabaseHelper.instance.deletePreset,
+        presetHasLogs:
+            widget.presetHasLogs ?? DatabaseHelper.instance.presetHasLogs,
+      ),
+    );
+    _confirmingDelete = false;
+    if (!mounted || result == null) return;
+    if (result == _PresetDeleteResult.history) {
+      widget.onOpenHistory?.call();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result == _PresetDeleteResult.deleted
+              ? 'Preset deleted.'
+              : 'This preset no longer exists. Reloading the list.',
+        ),
+      ),
+    );
+    _retry();
   }
 
   @override
@@ -116,12 +159,127 @@ class _PresetsScreenState extends State<PresetsScreen> {
                   preset: preset,
                   onOpen: () => widget.onOpenSession(preset),
                   onEdit: () => _editPreset(preset),
+                  onDelete: () => _deletePreset(preset),
                 );
               }).toList(),
             );
           },
         ),
       ],
+    );
+  }
+}
+
+enum _PresetDeleteResult { deleted, missing, history }
+
+class _DeletePresetDialog extends StatefulWidget {
+  const _DeletePresetDialog({
+    required this.preset,
+    required this.deletePreset,
+    required this.presetHasLogs,
+  });
+
+  final FocusPreset preset;
+  final Future<int> Function(int) deletePreset;
+  final Future<bool> Function(int) presetHasLogs;
+
+  @override
+  State<_DeletePresetDialog> createState() => _DeletePresetDialogState();
+}
+
+class _DeletePresetDialogState extends State<_DeletePresetDialog> {
+  bool _pending = false;
+  bool _protected = false;
+  String? _error;
+
+  Future<void> _delete() async {
+    if (_pending || _protected) return;
+    setState(() {
+      _pending = true;
+      _error = null;
+    });
+    try {
+      final id = widget.preset.id!;
+      if (await widget.presetHasLogs(id)) {
+        if (!mounted) return;
+        setState(() => _protected = true);
+        return;
+      }
+      final count = await widget.deletePreset(id);
+      if (count != 0 && count != 1) {
+        throw StateError('Unexpected delete result.');
+      }
+      if (!mounted) return;
+      Navigator.pop(
+        context,
+        count == 1 ? _PresetDeleteResult.deleted : _PresetDeleteResult.missing,
+      );
+    } on DatabaseException {
+      // A session could be added after the first relationship check.
+      try {
+        final hasLogs = await widget.presetHasLogs(widget.preset.id!);
+        if (mounted) setState(() => _protected = hasLogs);
+      } catch (_) {
+        // Keep a read failure separate from a confirmed protected preset.
+      }
+      if (mounted && !_protected) {
+        setState(() => _error = 'Could not delete this preset. Try again.');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Could not delete this preset. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _pending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope<_PresetDeleteResult>(
+      canPop: !_pending,
+      child: AlertDialog(
+        title: Text(
+          _protected ? 'Keep this preset' : 'Delete "${widget.preset.label}"?',
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _protected
+                    ? 'This preset has saved sessions. To delete it, first remove its logs from History. Your history has been kept.'
+                    : 'This removes the preset. Presets with saved sessions cannot be deleted until their logs are removed from History.',
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _pending ? null : () => Navigator.pop(context),
+            child: Text(_protected ? 'Keep preset' : 'Cancel'),
+          ),
+          if (_protected)
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(context, _PresetDeleteResult.history),
+              child: const Text('Open History'),
+            )
+          else
+            FilledButton(
+              onPressed: _pending ? null : _delete,
+              child: Text(_pending ? 'Deleting…' : 'Delete preset'),
+            ),
+        ],
+      ),
     );
   }
 }
