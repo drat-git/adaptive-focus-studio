@@ -31,9 +31,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openFocusSession(FocusPreset preset) {
-    Navigator.push<void>(
+    Navigator.push<bool>(
       context,
-      MaterialPageRoute<void>(
+      MaterialPageRoute<bool>(
         builder: (context) => FocusSessionScreen(preset: preset),
       ),
     );

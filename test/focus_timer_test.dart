@@ -1,4 +1,5 @@
 import 'package:adaptive_focus_studio/models/focus_preset.dart';
+import 'package:adaptive_focus_studio/models/session_log.dart';
 import 'package:adaptive_focus_studio/screens/focus_session_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +32,7 @@ Future<void> showTimer(
   WidgetTester tester, {
   FocusPreset? preset,
   required FakeStopwatch stopwatch,
+  Future<int> Function(SessionLog)? saveLog,
 }) async {
   tester.view.physicalSize = const Size(800, 1400);
   tester.view.devicePixelRatio = 1;
@@ -38,7 +40,11 @@ Future<void> showTimer(
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
-      home: FocusSessionScreen(preset: preset, stopwatch: stopwatch),
+      home: FocusSessionScreen(
+        preset: preset,
+        stopwatch: stopwatch,
+        saveLog: saveLog,
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -103,7 +109,12 @@ void main() {
       moodTag: 'Focused',
       plannedSeconds: 60,
     );
-    await showTimer(tester, preset: preset, stopwatch: stopwatch);
+    await showTimer(
+      tester,
+      preset: preset,
+      stopwatch: stopwatch,
+      saveLog: (_) async => 8,
+    );
     tester.widget<Slider>(find.byType(Slider)).onChanged!(120);
     await tester.pump();
     expect(find.text('02:00'), findsOneWidget);
@@ -111,10 +122,11 @@ void main() {
     await tester.tap(find.text('Start session'));
     stopwatch.advance(const Duration(minutes: 3));
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text('Session complete'), findsOneWidget);
-    expect(find.text('00:00'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Session saved'), findsOneWidget);
+    expect(find.text('Saved entry #8'), findsOneWidget);
     expect(find.text('Completed: 2 min'), findsOneWidget);
-    expect(find.text('This session has not been saved.'), findsOneWidget);
+    expect(find.text('Source: Measured timer'), findsOneWidget);
     expect(find.text('Resume'), findsNothing);
     expect(stopwatch.isRunning, isFalse);
     stopwatch.advance(const Duration(seconds: 5));
