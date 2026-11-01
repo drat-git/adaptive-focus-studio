@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/database_helper.dart';
+import '../helpers/session_scout.dart';
 import '../models/focus_preset.dart';
 import '../models/session_log.dart';
 import '../widgets/display_widgets.dart';
@@ -13,11 +14,13 @@ class FocusSessionScreen extends StatefulWidget {
     this.preset,
     this.stopwatch,
     this.saveLog,
+    this.loadLogs,
   });
 
   final FocusPreset? preset;
   final Stopwatch? stopwatch;
   final Future<int> Function(SessionLog)? saveLog;
+  final Future<List<SessionLog>> Function()? loadLogs;
 
   @override
   State<FocusSessionScreen> createState() => _FocusSessionScreenState();
@@ -31,6 +34,7 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
   int _plannedSeconds = 1500;
   int _completedSeconds = 0;
   int? _startedAt;
+  int? _presetIdSnapshot;
   String? _moodSnapshot;
   bool _running = false;
   bool _complete = false;
@@ -39,6 +43,12 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
   SessionLog? _receipt;
   int? _savedLogId;
   String? _saveError;
+  SessionScoutResult? _scout;
+  bool _scoutLoading = false;
+  bool _scoutDismissed = false;
+  String? _scoutError;
+  String? _scoutMessage;
+  int _scoutReadNumber = 0;
 
   bool get _started => _startedAt != null;
   bool get _hasSavedPreset => widget.preset?.id != null;
@@ -61,6 +71,124 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
     _stopwatch.reset();
     _selectedSeconds = widget.preset?.plannedSeconds ?? 1500;
     WidgetsBinding.instance.addObserver(this);
+    _loadScout();
+  }
+
+  @override
+  void didUpdateWidget(covariant FocusSessionScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_started) return;
+    final changedPreset = oldWidget.preset?.id != widget.preset?.id;
+    if (changedPreset ||
+        oldWidget.preset?.plannedSeconds != widget.preset?.plannedSeconds) {
+      _selectedSeconds = widget.preset?.plannedSeconds ?? 1500;
+    }
+    if (changedPreset ||
+        oldWidget.preset?.moodTag != widget.preset?.moodTag ||
+        oldWidget.loadLogs != widget.loadLogs) {
+      _loadScout();
+    }
+  }
+
+  Future<void> _loadScout() async {
+    if (_started) return;
+    final readNumber = ++_scoutReadNumber;
+    final mood = widget.preset?.moodTag ?? '';
+    setState(() {
+      _scoutLoading = true;
+      _scoutError = null;
+      _scoutMessage = null;
+      _scoutDismissed = false;
+    });
+    try {
+      final loader = widget.loadLogs ?? DatabaseHelper.instance.getSessionLogs;
+      final logs = _hasSavedPreset ? await loader() : <SessionLog>[];
+      final result = calculateSessionScout(logs: logs, moodTag: mood);
+      if (!mounted || readNumber != _scoutReadNumber || _started) return;
+      setState(() {
+        _scout = result;
+        _scoutLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || readNumber != _scoutReadNumber || _started) return;
+      setState(() {
+        _scoutLoading = false;
+        _scoutError = 'Could not load Session Scout history. You can still choose a duration and start.';
+      });
+    }
+  }
+
+  void _applyScout() {
+    final scout = _scout;
+    if (_started ||
+        !_hasSavedPreset ||
+        _scoutLoading ||
+        _scoutDismissed ||
+        scout?.state != SessionScoutState.ready) {
+      return;
+    }
+    final seconds = scout!.suggestedSeconds!;
+    setState(() {
+      _selectedSeconds = seconds;
+      _scoutMessage =
+          'Duration set to ${formatDuration(seconds)}. Start when ready.';
+    });
+  }
+
+  Widget _scoutCard() {
+    final scout = _scout;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Session Scout'),
+            const SizedBox(height: 8),
+            if (_scoutLoading)
+              const Text('Loading recent history…')
+            else if (_scoutError != null) ...[
+              Text(_scoutError!),
+              TextButton(onPressed: _loadScout, child: const Text('Try again')),
+            ] else if (scout != null) ...[
+              if (!_hasSavedPreset)
+                const Text(
+                  'Choose a saved preset with a valid mood to use Session Scout.',
+                )
+              else ...[
+                if (scout.state == SessionScoutState.ready)
+                  Text(
+                    'Suggested duration: ${formatDuration(scout.suggestedSeconds!)}',
+                  ),
+                Text(scout.explanation),
+                if (scout.warning != null) Text(scout.warning!),
+              ],
+              Text('Fixed baseline: ${formatDuration(scout.baselineSeconds)}'),
+              if (_scoutMessage != null) Text(_scoutMessage!),
+            ],
+            Wrap(
+              spacing: 8,
+              children: [
+                if (!_scoutLoading &&
+                    _scoutError == null &&
+                    scout?.state == SessionScoutState.ready &&
+                    _hasSavedPreset)
+                  OutlinedButton(
+                    onPressed: _applyScout,
+                    child: const Text('Apply'),
+                  ),
+                TextButton(
+                  onPressed: () {
+                    if (!_started) setState(() => _scoutDismissed = true);
+                  },
+                  child: const Text('Not now'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -90,11 +218,13 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
 
   void _start() {
     if (!_hasSavedPreset || _started || _saving || _confirmingDiscard) return;
+    _scoutReadNumber++;
     _stopwatch.reset();
     _stopwatch.start();
     setState(() {
       _plannedSeconds = _selectedSeconds;
       _startedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
+      _presetIdSnapshot = widget.preset!.id;
       _moodSnapshot = widget.preset!.moodTag;
       _completedSeconds = 0;
       _running = true;
@@ -141,7 +271,7 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
     final receipt =
         _receipt ??
         SessionLog(
-          presetId: widget.preset!.id!,
+          presetId: _presetIdSnapshot!,
           startedAt: _startedAt!,
           plannedSecondsSnapshot: _plannedSeconds,
           completedSeconds: _elapsedSeconds(),
@@ -215,6 +345,7 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
     setState(() {
       _completedSeconds = 0;
       _startedAt = null;
+      _presetIdSnapshot = null;
       _moodSnapshot = null;
       _running = false;
       _complete = false;
@@ -222,6 +353,7 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
       _savedLogId = null;
       _saveError = null;
     });
+    _loadScout();
   }
 
   Future<void> _requestClose() async {
@@ -357,7 +489,10 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
                   semanticFormatterCallback: (value) =>
                       formatDuration(value.round()),
                   onChanged: (value) {
-                    setState(() => _selectedSeconds = value.round());
+                    setState(() {
+                      _selectedSeconds = value.round();
+                      _scoutMessage = null;
+                    });
                   },
                 ),
                 const Row(
@@ -401,6 +536,10 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
                 ),
               ),
             _controls(),
+            if (!_started && !_scoutDismissed) ...[
+              const SizedBox(height: 16),
+              _scoutCard(),
+            ],
             if (_receipt != null) ...[
               const SizedBox(height: 24),
               const SectionHeading(title: 'Session receipt'),
