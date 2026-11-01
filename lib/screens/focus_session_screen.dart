@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/database_helper.dart';
+import '../data/settings_store.dart';
 import '../helpers/session_scout.dart';
 import '../models/focus_preset.dart';
 import '../models/session_log.dart';
@@ -15,12 +16,14 @@ class FocusSessionScreen extends StatefulWidget {
     this.stopwatch,
     this.saveLog,
     this.loadLogs,
+    this.loadReduceMotion,
   });
 
   final FocusPreset? preset;
   final Stopwatch? stopwatch;
   final Future<int> Function(SessionLog)? saveLog;
   final Future<List<SessionLog>> Function()? loadLogs;
+  final Future<bool> Function()? loadReduceMotion;
 
   @override
   State<FocusSessionScreen> createState() => _FocusSessionScreenState();
@@ -49,6 +52,7 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
   String? _scoutError;
   String? _scoutMessage;
   int _scoutReadNumber = 0;
+  bool _reduceMotion = true;
 
   bool get _started => _startedAt != null;
   bool get _hasSavedPreset => widget.preset?.id != null;
@@ -72,6 +76,17 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
     _selectedSeconds = widget.preset?.plannedSeconds ?? 1500;
     WidgetsBinding.instance.addObserver(this);
     _loadScout();
+    _loadMotion();
+  }
+
+  Future<void> _loadMotion() async {
+    try {
+      final loader = widget.loadReduceMotion ?? SettingsStore().getReduceMotion;
+      final reduceMotion = await loader();
+      if (mounted) setState(() => _reduceMotion = reduceMotion);
+    } catch (_) {
+      // Keep the status still if the preference cannot be read.
+    }
   }
 
   @override
@@ -137,56 +152,61 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
 
   Widget _scoutCard() {
     final scout = _scout;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Session Scout'),
-            const SizedBox(height: 8),
-            if (_scoutLoading)
-              const Text('Loading recent history…')
-            else if (_scoutError != null) ...[
-              Text(_scoutError!),
-              TextButton(onPressed: _loadScout, child: const Text('Try again')),
-            ] else if (scout != null) ...[
-              if (!_hasSavedPreset)
-                const Text(
-                  'Choose a saved preset with a valid mood to use Session Scout.',
-                )
-              else ...[
-                if (scout.state == SessionScoutState.ready)
-                  Text(
-                    'Suggested duration: ${formatDuration(scout.suggestedSeconds!)}',
-                  ),
-                Text(scout.explanation),
-                if (scout.warning != null) Text(scout.warning!),
-              ],
-              Text('Fixed baseline: ${formatDuration(scout.baselineSeconds)}'),
-              if (_scoutMessage != null) Text(_scoutMessage!),
-            ],
-            Wrap(
-              spacing: 8,
-              children: [
-                if (!_scoutLoading &&
-                    _scoutError == null &&
-                    scout?.state == SessionScoutState.ready &&
-                    _hasSavedPreset)
-                  OutlinedButton(
-                    onPressed: _applyScout,
-                    child: const Text('Apply'),
-                  ),
-                TextButton(
-                  onPressed: () {
-                    if (!_started) setState(() => _scoutDismissed = true);
-                  },
-                  child: const Text('Not now'),
-                ),
-              ],
-            ),
-          ],
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          left: BorderSide(color: theme.colorScheme.secondary, width: 3),
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Session Scout', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (_scoutLoading)
+            const Text('Loading recent history…')
+          else if (_scoutError != null) ...[
+            Text(_scoutError!),
+            TextButton(onPressed: _loadScout, child: const Text('Try again')),
+          ] else if (scout != null) ...[
+            if (!_hasSavedPreset)
+              const Text(
+                'Choose a saved preset with a valid mood to use Session Scout.',
+              )
+            else ...[
+              if (scout.state == SessionScoutState.ready)
+                Text(
+                  'Suggested duration: ${formatDuration(scout.suggestedSeconds!)}',
+                ),
+              Text(scout.explanation),
+              if (scout.warning != null) Text(scout.warning!),
+            ],
+            Text('Fixed baseline: ${formatDuration(scout.baselineSeconds)}'),
+            if (_scoutMessage != null) Text(_scoutMessage!),
+          ],
+          Wrap(
+            spacing: 8,
+            children: [
+              if (!_scoutLoading &&
+                  _scoutError == null &&
+                  scout?.state == SessionScoutState.ready &&
+                  _hasSavedPreset)
+                OutlinedButton(
+                  onPressed: _applyScout,
+                  child: const Text('Apply'),
+                ),
+              TextButton(
+                onPressed: () {
+                  if (!_started) setState(() => _scoutDismissed = true);
+                },
+                child: const Text('Not now'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -440,6 +460,9 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final still = _reduceMotion || MediaQuery.disableAnimationsOf(context);
     final planned = _started ? _plannedSeconds : _selectedSeconds;
     final remaining = planned - _completedSeconds;
     final labels = MaterialLocalizations.of(context);
@@ -472,7 +495,10 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
                   ? 'Choose a saved preset before starting a session.'
                   : 'Use this preset for your next study block.',
             ),
-            Text(widget.preset?.label ?? 'No preset selected.'),
+            Text(
+              widget.preset?.label ?? 'No preset selected.',
+              style: theme.textTheme.headlineSmall,
+            ),
             if (widget.preset != null)
               Text('Mood: ${_moodSnapshot ?? widget.preset!.moodTag}'),
             if (_hasSavedPreset && _receipt == null) ...[
@@ -502,40 +528,82 @@ class _FocusSessionScreenState extends State<FocusSessionScreen>
               ],
             ],
             const SizedBox(height: 24),
-            const SectionHeading(title: 'Session'),
-            Text(_status),
-            if (_hasSavedPreset && _receipt == null) ...[
-              const SizedBox(height: 12),
-              const Text('Remaining time'),
-              Semantics(
-                label: 'Remaining time: ${formatDuration(remaining)}',
-                excludeSemantics: true,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    _clock(remaining),
-                    style: Theme.of(context).textTheme.displayLarge,
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Session', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Semantics(
+                      liveRegion: true,
+                      child: AnimatedContainer(
+                        key: const Key('session-status'),
+                        duration: still
+                            ? Duration.zero
+                            : const Duration(milliseconds: 160),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _running ? colors.primary : colors.surface,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _status,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: _running ? colors.onPrimary : colors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  if (_hasSavedPreset && _receipt == null) ...[
+                    const SizedBox(height: 20),
+                    const Text('Remaining time'),
+                    Semantics(
+                      label: 'Remaining time: ${formatDuration(remaining)}',
+                      excludeSemantics: true,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _clock(remaining),
+                          style: theme.textTheme.displayLarge?.copyWith(
+                            color: colors.primary,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -2,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Text('Completed: ${formatDuration(_completedSeconds)}'),
+                  ],
+                  if (startedAt != null)
+                    Text(
+                      'Started: ${labels.formatMediumDate(startedAt)} · '
+                      '${labels.formatTimeOfDay(TimeOfDay.fromDateTime(startedAt), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context))}',
+                    ),
+                  const SizedBox(height: 20),
+                  if (_saveError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        _saveError!,
+                        style: TextStyle(color: colors.error),
+                      ),
+                    ),
+                  _controls(),
+                ],
               ),
-              Text('Completed: ${formatDuration(_completedSeconds)}'),
-            ],
-            if (startedAt != null)
-              Text(
-                'Started: ${labels.formatMediumDate(startedAt)} · '
-                '${labels.formatTimeOfDay(TimeOfDay.fromDateTime(startedAt), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context))}',
-              ),
-            const SizedBox(height: 16),
-            if (_saveError != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  _saveError!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            _controls(),
+            ),
             if (!_started && !_scoutDismissed) ...[
               const SizedBox(height: 16),
               _scoutCard(),

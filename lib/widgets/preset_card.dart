@@ -19,44 +19,61 @@ class PresetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = preset.moodTag == 'Calm'
+        ? theme.colorScheme.primary
+        : preset.moodTag == 'Focused'
+        ? const Color(0xFFA9443D)
+        : const Color(0xFF8B3441);
+
     return GestureDetector(
       onLongPress: onEdit,
-      child: Card(
+      child: Container(
         margin: const EdgeInsets.only(bottom: 16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                preset.label,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const Divider(),
-              Text('Mood: ${preset.moodTag}'),
-              Text('Planned time: ${formatDuration(preset.plannedSeconds)}'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  OutlinedButton(
-                    onPressed: onOpen,
-                    child: const Text('Open session'),
-                  ),
-                  TextButton.icon(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Edit'),
-                  ),
-                  TextButton.icon(
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Delete'),
-                  ),
-                ],
-              ),
-            ],
+        padding: const EdgeInsets.fromLTRB(18, 16, 14, 10),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          border: Border(
+            left: BorderSide(color: accent, width: 4),
+            bottom: BorderSide(color: theme.colorScheme.outlineVariant),
           ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(preset.label, style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Mood: ${preset.moodTag}',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Planned time: ${formatDuration(preset.plannedSeconds)}',
+              style: theme.textTheme.titleLarge?.copyWith(color: accent),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                FilledButton(
+                  onPressed: onOpen,
+                  child: const Text('Open session'),
+                ),
+                TextButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  label: const Text('Edit'),
+                ),
+                TextButton.icon(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  label: const Text('Delete'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

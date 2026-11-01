@@ -152,37 +152,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           if (_loadFailed)
             TextButton(onPressed: _load, child: const Text('Try again')),
-          const SectionHeading(
-            title: 'Default duration',
-            description: 'Used when creating a new preset.',
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              border: Border(
+                left: BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 4,
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionHeading(
+                  title: 'Default duration',
+                  description: 'Used when creating a new preset.',
+                ),
+                const Text(
+                  'Existing presets and active sessions keep their own duration.',
+                ),
+                if (!_loading && !_loadFailed) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    formatDuration(_seconds),
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  Slider(
+                    value: _seconds.toDouble(),
+                    min: 60,
+                    max: 7200,
+                    divisions: 119,
+                    label: formatDuration(_seconds),
+                    semanticFormatterCallback: (value) =>
+                        formatDuration(value.round()),
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _seconds = value.round()),
+                    onChangeEnd: _saving ? null : _saveDuration,
+                  ),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [Text('1 min'), Text('120 min')],
+                  ),
+                ],
+              ],
+            ),
           ),
-          const Text(
-            'Existing presets and active sessions keep their own duration.',
-          ),
-          if (!_loading && !_loadFailed) ...[
-            const SizedBox(height: 12),
-            Text(
-              formatDuration(_seconds),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            Slider(
-              value: _seconds.toDouble(),
-              min: 60,
-              max: 7200,
-              divisions: 119,
-              label: formatDuration(_seconds),
-              semanticFormatterCallback: (value) =>
-                  formatDuration(value.round()),
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _seconds = value.round()),
-              onChangeEnd: _saving ? null : _saveDuration,
-            ),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [Text('1 min'), Text('120 min')],
-            ),
-          ],
           const SizedBox(height: 24),
           const SectionHeading(
             title: 'Reduce motion',

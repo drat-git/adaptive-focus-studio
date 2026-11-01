@@ -123,7 +123,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add manual entry'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField).first, '60');
+    await tester.enterText(find.byKey(const Key('completed-minutes')), '1');
+    await tester.enterText(find.byKey(const Key('completed-seconds')), '0');
     await tester.tap(find.text('Save entry'));
     await tester.pumpAndSettle();
     expect(database.inserts, 1);

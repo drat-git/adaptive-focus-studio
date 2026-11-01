@@ -63,30 +63,41 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(titles[_selectedIndex])),
       body: pages[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: colors.surface,
-        selectedItemColor: colors.primary,
-        unselectedItemColor: colors.onSurfaceVariant,
-        onTap: _savingSettings
-            ? null
-            : (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bookmarks_outlined),
-            label: 'Presets',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            label: 'Settings',
-          ),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: colors.surface,
+          selectedItemColor: colors.primary,
+          unselectedItemColor: colors.onSurfaceVariant,
+          onTap: _savingSettings
+              ? null
+              : (index) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                },
+          elevation: 0,
+          selectedFontSize: 13,
+          unselectedFontSize: 13,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bookmarks_outlined),
+              label: 'Presets',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.history),
+              label: 'History',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings_outlined),
+              label: 'Settings',
+            ),
+          ],
+        ),
       ),
     );
   }

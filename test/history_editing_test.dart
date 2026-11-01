@@ -8,9 +8,13 @@ import 'package:adaptive_focus_studio/screens/session_log_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'manual_entry_test.dart' show openEntry, presets;
+import 'manual_entry_test.dart' show enterCompletedTime, openEntry, presets;
 
-SessionLog savedLog({String source = 'timer', int? startedAt}) {
+SessionLog savedLog({
+  String source = 'timer',
+  int? startedAt,
+  int completedSeconds = 1200,
+}) {
   return SessionLog(
     id: 6,
     presetId: 9,
@@ -18,7 +22,7 @@ SessionLog savedLog({String source = 'timer', int? startedAt}) {
         startedAt ??
         DateTime(2026, 10, 30, 12, 34, 56, 789).millisecondsSinceEpoch,
     plannedSecondsSnapshot: 1500,
-    completedSeconds: 1200,
+    completedSeconds: completedSeconds,
     moodTagSnapshot: 'Calm',
     status: 'finished',
     source: source,
@@ -60,6 +64,54 @@ Future<void> openHistory(WidgetTester tester, EditingDatabase database) async {
 }
 
 void main() {
+  testWidgets(
+    'Exact prefill and equivalent formatting keep an unchanged timer',
+    (tester) async {
+      var writes = 0;
+      bool? closed;
+      await openEntry(
+        tester,
+        SessionLogEditor(
+          presets: presets,
+          log: savedLog(completedSeconds: 3661),
+          saveLog: (_) async {
+            writes++;
+            return 1;
+          },
+        ),
+        (value) => closed = value,
+      );
+      for (final unit in ['hours', 'minutes', 'seconds']) {
+        expect(
+          tester
+              .widget<TextFormField>(find.byKey(Key('completed-$unit')))
+              .controller!
+              .text,
+          '1',
+        );
+      }
+      // The same numeric sum with an invalid component must still be rejected.
+      await enterCompletedTime(tester, minutes: '61', seconds: '1');
+      await tester.tap(find.text('Save entry'));
+      await tester.pumpAndSettle();
+      expect(find.text('Use 0 to 59 minutes.'), findsOneWidget);
+      expect(closed, isNull);
+      expect(writes, 0);
+      await enterCompletedTime(
+        tester,
+        hours: '01',
+        minutes: '01',
+        seconds: '01',
+      );
+      await tester.pump();
+      expect(find.text('Source: Measured timer'), findsOneWidget);
+      await tester.tap(find.text('Save entry'));
+      await tester.pumpAndSettle();
+      expect(closed, isFalse);
+      expect(writes, 0);
+    },
+  );
+
   testWidgets(
     'Unchanged date/time picker confirmation keeps a measured timer',
     (tester) async {
@@ -169,7 +221,7 @@ void main() {
         ),
         (value) => closed = value,
       );
-      await tester.enterText(find.byType(TextFormField).first, '900');
+      await enterCompletedTime(tester, minutes: '15');
       await tester.tap(find.text('Save entry'));
       await tester.pumpAndSettle();
       expect(
@@ -180,10 +232,10 @@ void main() {
       );
       expect(
         tester
-            .widget<TextFormField>(find.byType(TextFormField).first)
+            .widget<TextFormField>(find.byKey(const Key('completed-minutes')))
             .controller!
             .text,
-        '900',
+        '15',
       );
       await tester.tap(find.text('Save entry'));
       await tester.pumpAndSettle();

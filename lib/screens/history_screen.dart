@@ -131,44 +131,112 @@ class _HistoryScreenState extends State<HistoryScreen> {
       'manual': 'Manual entry',
       'edited_timer': 'Corrected timer',
     };
-    return Card(
+    final theme = Theme.of(context);
+    return Container(
       key: ValueKey(log.id),
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _presetNames[log.presetId] ??
-                  'Preset #${log.presetId} unavailable',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            Text('Entry #${log.id} · ${_localDateTime(log.startedAt)}'),
-            const Divider(),
-            Text('Planned: ${formatDuration(log.plannedSecondsSnapshot)}'),
-            Text('Completed: ${formatDuration(log.completedSeconds)}'),
-            Text('Mood at session: ${log.moodTagSnapshot}'),
-            Text(log.status == 'finished' ? 'Finished' : 'Cancelled'),
-            Text('Source: ${sources[log.source]}'),
-            if (log.note.isNotEmpty) Text('Note: ${log.note}'),
-            Wrap(
-              spacing: 8,
-              children: [
-                TextButton.icon(
-                  onPressed: () => _openEditor(log),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit'),
-                ),
-                TextButton.icon(
-                  onPressed: () => _deleteEntry(log),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Delete'),
-                ),
-              ],
-            ),
-          ],
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _presetNames[log.presetId] ?? 'Preset #${log.presetId} unavailable',
+            style: theme.textTheme.titleLarge,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Entry #${log.id} · ${_localDateTime(log.startedAt)}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Completed: ${formatDuration(log.completedSeconds)}',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          Text('Planned: ${formatDuration(log.plannedSecondsSnapshot)}'),
+          const SizedBox(height: 8),
+          Text('Mood at session: ${log.moodTagSnapshot}'),
+          Text(log.status == 'finished' ? 'Finished' : 'Cancelled'),
+          Text('Source: ${sources[log.source]}'),
+          if (log.note.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('Note: ${log.note}'),
+            ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton.icon(
+                onPressed: () => _openEditor(log),
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                label: const Text('Edit'),
+              ),
+              TextButton.icon(
+                onPressed: () => _deleteEntry(log),
+                icon: const Icon(Icons.delete_outline, size: 20),
+                label: const Text('Delete'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sessionSummary() {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Finished session average',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.onPrimaryContainer,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (_finishedCount == 0 || _averageSeconds == null)
+            Text(
+              _mood == 'All moods'
+                  ? 'No finished sessions yet.'
+                  : 'No finished sessions for this mood.',
+            )
+          else ...[
+            Text(
+              formatDuration(_averageSeconds!.round()),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Text('Average completed time, rounded to seconds.'),
+          ],
+          Text(
+            '$_finishedCount finished ${_finishedCount == 1 ? 'entry' : 'entries'}',
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Cancelled sessions are excluded. Manual and corrected entries are included.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -222,26 +290,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           TextButton(onPressed: _load, child: const Text('Try again')),
         ] else ...[
           const SizedBox(height: 12),
-          const SectionHeading(title: 'Finished session average'),
-          if (_finishedCount == 0 || _averageSeconds == null)
-            Text(
-              _mood == 'All moods'
-                  ? 'No finished sessions yet.'
-                  : 'No finished sessions for this mood.',
-            )
-          else ...[
-            Text(
-              formatDuration(_averageSeconds!.round()),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const Text('Average completed time, rounded to seconds.'),
-          ],
-          Text(
-            '$_finishedCount finished ${_finishedCount == 1 ? 'entry' : 'entries'}',
-          ),
-          const Text(
-            'Cancelled sessions are excluded. Manual and corrected entries are included.',
-          ),
+          _sessionSummary(),
           const SizedBox(height: 24),
           if (_logs.isEmpty)
             const Text(

@@ -20,10 +20,16 @@ class SectionHeading extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: theme.textTheme.titleLarge),
+        Text(
+          title,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         if (description != null)
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: 6),
             child: Text(
               description!,
               style: theme.textTheme.bodyMedium?.copyWith(
@@ -31,7 +37,7 @@ class SectionHeading extends StatelessWidget {
               ),
             ),
           ),
-        const Divider(),
+        const SizedBox(height: 20),
       ],
     );
   }

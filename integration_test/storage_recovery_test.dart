@@ -295,8 +295,10 @@ void main() {
       );
       await tester.tap(find.text('Open entry'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byType(TextFormField).first);
-      await tester.enterText(find.byType(TextFormField).first, '600');
+      await tester.ensureVisible(find.byKey(const Key('completed-minutes')));
+      await tester.enterText(find.byKey(const Key('completed-minutes')), '10');
+      await tester.ensureVisible(find.byKey(const Key('completed-seconds')));
+      await tester.enterText(find.byKey(const Key('completed-seconds')), '0');
       await tester.ensureVisible(find.byType(TextFormField).last);
       await tester.enterText(
         find.byType(TextFormField).last,
@@ -318,10 +320,10 @@ void main() {
       expect(await helper.getSessionLogs(), isEmpty);
       expect(
         tester
-            .widget<TextFormField>(find.byType(TextFormField).first)
+            .widget<TextFormField>(find.byKey(const Key('completed-minutes')))
             .controller!
             .text,
-        '600',
+        '10',
       );
       expect(
         tester

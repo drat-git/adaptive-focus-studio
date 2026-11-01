@@ -242,10 +242,11 @@ class _PresetEditorScreenState extends State<PresetEditorScreen> {
                           FocusPreset.validateMoodTag(value ?? ''),
                     ),
                     const SizedBox(height: 24),
+                    const Divider(),
                     const Text('Duration for this preset'),
                     Text(
                       formatDuration(_seconds),
-                      style: Theme.of(context).textTheme.titleLarge,
+                      style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     Slider(
                       value: _seconds.toDouble(),

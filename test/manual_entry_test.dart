@@ -49,78 +49,106 @@ Future<void> openEntry(
   await tester.pumpAndSettle();
 }
 
-void main() {
-  testWidgets('Validates seconds and saves one manual snapshot while pending', (
-    tester,
-  ) async {
-    final pending = Completer<int>();
-    final writes = <SessionLog>[];
-    bool? closed;
-    await openEntry(
-      tester,
-      SessionLogEditor(
-        presets: presets,
-        saveLog: (log) {
-          writes.add(log);
-          return pending.future;
-        },
-      ),
-      (value) => closed = value,
-    );
-    await tester.tap(find.text('Save entry'));
-    await tester.pumpAndSettle();
-    expect(find.text('Enter a whole number of seconds.'), findsOneWidget);
-    await tester.enterText(find.byType(TextFormField).first, '7201');
-    await tester.tap(find.text('Save entry'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Enter completed time from 0 to 7200 seconds.'),
-      findsOneWidget,
-    );
-    expect(writes, isEmpty);
+Future<void> enterCompletedTime(
+  WidgetTester tester, {
+  String hours = '0',
+  String minutes = '0',
+  String seconds = '0',
+}) async {
+  for (final entry in {
+    'hours': hours,
+    'minutes': minutes,
+    'seconds': seconds,
+  }.entries) {
+    final field = find.byKey(Key('completed-${entry.key}'));
+    await tester.ensureVisible(field);
+    await tester.enterText(field, entry.value);
+  }
+}
 
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Reading (#9)').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Planned snapshot: 30 min'), findsOneWidget);
-    await tester.enterText(find.byType(TextFormField).first, '0');
-    await tester.enterText(find.byType(TextFormField).last, '  My notes  ');
-    await tester.tap(find.text('Save entry'));
-    await tester.pump();
-    await tester.binding.handlePopRoute();
-    await tester.pump();
-    expect(closed, isNull);
-    expect(writes, hasLength(1));
-    expect(writes.single.presetId, 9);
-    expect(writes.single.plannedSecondsSnapshot, 1800);
-    expect(writes.single.completedSeconds, 0);
-    expect(writes.single.moodTagSnapshot, 'Focused');
-    expect(writes.single.source, 'manual');
-    expect(writes.single.note, 'My notes');
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
-          .onPressed,
-      isNull,
-    );
-    expect(
-      tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Saving…'))
-          .onPressed,
-      isNull,
-    );
-    expect(
-      tester
-          .widgetList<TextFormField>(find.byType(TextFormField))
-          .every((field) => field.enabled == false),
-      isTrue,
-    );
-    pending.complete(17);
-    await tester.pumpAndSettle();
-    expect(closed, isTrue);
-    expect(find.text('Manual session entry'), findsNothing);
-  });
+void main() {
+  testWidgets(
+    'Validates time components and saves one manual snapshot while pending',
+    (tester) async {
+      final pending = Completer<int>();
+      final writes = <SessionLog>[];
+      bool? closed;
+      await openEntry(
+        tester,
+        SessionLogEditor(
+          presets: presets,
+          saveLog: (log) {
+            writes.add(log);
+            return pending.future;
+          },
+        ),
+        (value) => closed = value,
+      );
+      await tester.tap(find.text('Save entry'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter whole seconds.'), findsOneWidget);
+      await enterCompletedTime(tester, hours: '2', seconds: '1');
+      await tester.tap(find.text('Save entry'));
+      await tester.pumpAndSettle();
+      expect(find.text('Use no more than 2 hours total.'), findsOneWidget);
+      expect(writes, isEmpty);
+      await enterCompletedTime(
+        tester,
+        hours: '3',
+        minutes: '60',
+        seconds: '1.5',
+      );
+      await tester.tap(find.text('Save entry'));
+      await tester.pumpAndSettle();
+      expect(find.text('Use 0 to 2 hours.'), findsOneWidget);
+      expect(find.text('Use 0 to 59 minutes.'), findsOneWidget);
+      expect(find.text('Enter whole seconds.'), findsOneWidget);
+      expect(writes, isEmpty);
+
+      await tester.ensureVisible(find.byType(DropdownButtonFormField<int>));
+      await tester.tap(find.byType(DropdownButtonFormField<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reading (#9)').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Planned snapshot: 30 min'), findsOneWidget);
+      await enterCompletedTime(tester);
+      await tester.enterText(find.byType(TextFormField).last, '  My notes  ');
+      await tester.tap(find.text('Save entry'));
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(closed, isNull);
+      expect(writes, hasLength(1));
+      expect(writes.single.presetId, 9);
+      expect(writes.single.plannedSecondsSnapshot, 1800);
+      expect(writes.single.completedSeconds, 0);
+      expect(writes.single.moodTagSnapshot, 'Focused');
+      expect(writes.single.source, 'manual');
+      expect(writes.single.note, 'My notes');
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Saving…'))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widgetList<TextFormField>(find.byType(TextFormField))
+            .every((field) => field.enabled == false),
+        isTrue,
+      );
+      pending.complete(17);
+      await tester.pumpAndSettle();
+      expect(closed, isTrue);
+      expect(find.text('Manual session entry'), findsNothing);
+    },
+  );
 
   testWidgets('A failed save retains the draft and retry keeps its values', (
     tester,
@@ -139,7 +167,7 @@ void main() {
       ),
       (value) => closed = value,
     );
-    await tester.enterText(find.byType(TextFormField).first, '7200');
+    await enterCompletedTime(tester, hours: '2');
     await tester.enterText(find.byType(TextFormField).last, 'x' * 241);
     await tester.tap(find.text('Save entry'));
     await tester.pumpAndSettle();
@@ -159,10 +187,10 @@ void main() {
     );
     expect(
       tester
-          .widget<TextFormField>(find.byType(TextFormField).first)
+          .widget<TextFormField>(find.byKey(const Key('completed-hours')))
           .controller!
           .text,
-      '7200',
+      '2',
     );
     expect(
       tester
@@ -199,7 +227,7 @@ void main() {
       );
       expect(find.byKey(const Key('session-date')), findsOneWidget);
       expect(find.byKey(const Key('session-time')), findsOneWidget);
-      await tester.enterText(find.byType(TextFormField).first, '60');
+      await enterCompletedTime(tester, minutes: '1');
       now = now.subtract(const Duration(hours: 1));
       await tester.tap(find.text('Save entry'));
       await tester.pumpAndSettle();
@@ -222,6 +250,28 @@ void main() {
       expect(writes, 0);
     },
   );
+
+  testWidgets('Hours minutes and seconds save as one exact duration', (
+    tester,
+  ) async {
+    SessionLog? saved;
+    await openEntry(
+      tester,
+      SessionLogEditor(
+        presets: presets,
+        saveLog: (log) async {
+          saved = log;
+          return 19;
+        },
+      ),
+      (_) {},
+    );
+    await enterCompletedTime(tester, hours: '1', minutes: '2', seconds: '3');
+    await tester.tap(find.text('Save entry'));
+    await tester.pumpAndSettle();
+    expect(saved!.completedSeconds, 3723);
+    expect(saved!.source, 'manual');
+  });
 
   testWidgets('No presets offers a destination without allowing a save', (
     tester,

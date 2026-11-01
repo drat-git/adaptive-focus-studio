@@ -67,26 +67,47 @@ class _PresetsScreenState extends State<PresetsScreen> {
   Widget _sessionSummary() {
     final count = _summary!['count'] as int;
     final average = _summary!['averageSeconds'] as double?;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeading(title: 'Finished session average'),
-        if (count == 0 || average == null)
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            _mood == 'All moods'
-                ? 'No finished sessions yet.'
-                : 'No finished sessions for this mood.',
-          )
-        else
-          Text(
-            formatDuration(average.round()),
-            style: Theme.of(context).textTheme.titleLarge,
+            'Finished session average',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.onPrimaryContainer,
+            ),
           ),
-        Text('$count finished ${count == 1 ? 'entry' : 'entries'}'),
-        const Text(
-          'Uses mood at each session. Cancelled entries are excluded; manual and corrected entries are included.',
-        ),
-      ],
+          const SizedBox(height: 6),
+          if (count == 0 || average == null)
+            Text(
+              _mood == 'All moods'
+                  ? 'No finished sessions yet.'
+                  : 'No finished sessions for this mood.',
+            )
+          else
+            Text(
+              formatDuration(average.round()),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          Text('$count finished ${count == 1 ? 'entry' : 'entries'}'),
+          const SizedBox(height: 6),
+          Text(
+            'Uses mood at each session. Cancelled entries are excluded; manual and corrected entries are included.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -166,7 +187,7 @@ class _PresetsScreenState extends State<PresetsScreen> {
           },
         ),
         const SizedBox(height: 12),
-        FilledButton.icon(
+        OutlinedButton.icon(
           onPressed: () => _editPreset(null),
           icon: const Icon(Icons.add),
           label: const Text('Add preset'),

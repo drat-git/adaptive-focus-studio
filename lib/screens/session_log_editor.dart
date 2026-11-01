@@ -27,7 +27,9 @@ class SessionLogEditor extends StatefulWidget {
 
 class _SessionLogEditorState extends State<SessionLogEditor> {
   final _formKey = GlobalKey<FormState>();
-  final _completed = TextEditingController();
+  final _hours = TextEditingController(text: '0');
+  final _minutes = TextEditingController(text: '0');
+  final _seconds = TextEditingController();
   final _note = TextEditingController();
   int? _presetId;
   int? _initialPresetId;
@@ -47,6 +49,25 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
   bool get _enabled => !_saving && !_missing;
   bool get _noPresets => !_editing && widget.presets.isEmpty;
 
+  int? get _completedSeconds {
+    final hours = int.tryParse(_hours.text.trim());
+    final minutes = int.tryParse(_minutes.text.trim());
+    final seconds = int.tryParse(_seconds.text.trim());
+    if (hours == null ||
+        hours < 0 ||
+        hours > 2 ||
+        minutes == null ||
+        minutes < 0 ||
+        minutes > 59 ||
+        seconds == null ||
+        seconds < 0 ||
+        seconds > 59) {
+      return null;
+    }
+    final total = hours * 3600 + minutes * 60 + seconds;
+    return SessionLog.validateCompletedSeconds(total) == null ? total : null;
+  }
+
   FocusPreset? get _preset {
     for (final preset in widget.presets) {
       if (preset.id == _presetId) return preset;
@@ -59,7 +80,11 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
         _mood != _initialMood ||
         _status != (widget.log?.status ?? 'finished') ||
         _dateTime != _initialDateTime ||
-        _completed.text != (widget.log?.completedSeconds.toString() ?? '') ||
+        (_editing
+            ? _completedSeconds != widget.log!.completedSeconds
+            : _hours.text != '0' ||
+                  _minutes.text != '0' ||
+                  _seconds.text.isNotEmpty) ||
         _note.text != (widget.log?.note ?? '');
   }
 
@@ -71,7 +96,9 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
       _presetId = log.presetId;
       _mood = log.moodTagSnapshot;
       _status = log.status;
-      _completed.text = log.completedSeconds.toString();
+      _hours.text = (log.completedSeconds ~/ 3600).toString();
+      _minutes.text = (log.completedSeconds % 3600 ~/ 60).toString();
+      _seconds.text = (log.completedSeconds % 60).toString();
       _note.text = log.note;
     } else if (widget.presets.isNotEmpty) {
       _presetId = widget.presets.first.id;
@@ -177,10 +204,22 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
     if (mounted) Navigator.pop(context, false);
   }
 
-  String? _validateCompleted(String? value) {
-    final seconds = int.tryParse((value ?? '').trim());
-    if (seconds == null) return 'Enter a whole number of seconds.';
-    return SessionLog.validateCompletedSeconds(seconds);
+  String? _validateDurationPart(String? value, String unit, int maximum) {
+    final number = int.tryParse((value ?? '').trim());
+    if (number == null) return 'Enter whole $unit.';
+    if (number < 0 || number > maximum) return 'Use 0 to $maximum $unit.';
+    return null;
+  }
+
+  String? _validateSeconds(String? value) {
+    final error = _validateDurationPart(value, 'seconds', 59);
+    if (error != null) return error;
+    if (_validateDurationPart(_hours.text, 'hours', 2) == null &&
+        _validateDurationPart(_minutes.text, 'minutes', 59) == null &&
+        _completedSeconds == null) {
+      return 'Use no more than 2 hours total.';
+    }
+    return null;
   }
 
   Future<void> _save() async {
@@ -205,7 +244,7 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
       startedAt: timestamp,
       plannedSecondsSnapshot:
           widget.log?.plannedSecondsSnapshot ?? _preset!.plannedSeconds,
-      completedSeconds: int.parse(_completed.text.trim()),
+      completedSeconds: _completedSeconds!,
       moodTagSnapshot: _mood,
       status: _status,
       source: widget.log == null || widget.log!.source == 'manual'
@@ -248,7 +287,9 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
 
   @override
   void dispose() {
-    _completed.dispose();
+    _hours.dispose();
+    _minutes.dispose();
+    _seconds.dispose();
     _note.dispose();
     super.dispose();
   }
@@ -357,17 +398,80 @@ class _SessionLogEditorState extends State<SessionLogEditor> {
                             ),
                           ),
                         const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _completed,
-                          enabled: _enabled,
-                          decoration: const InputDecoration(
-                            labelText: 'Completed seconds',
-                            helperText: 'Enter 0 to 7200 seconds.',
-                          ),
-                          keyboardType: TextInputType.number,
-                          validator: _validateCompleted,
-                          onChanged: (_) => setState(() {}),
+                        const Text('Completed time'),
+                        const SizedBox(height: 12),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final fields = [
+                              TextFormField(
+                                key: const Key('completed-hours'),
+                                controller: _hours,
+                                enabled: _enabled,
+                                decoration: const InputDecoration(
+                                  labelText: 'Hours',
+                                  errorMaxLines: 3,
+                                ),
+                                keyboardType: TextInputType.number,
+                                textInputAction: TextInputAction.next,
+                                validator: (value) =>
+                                    _validateDurationPart(value, 'hours', 2),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                              TextFormField(
+                                key: const Key('completed-minutes'),
+                                controller: _minutes,
+                                enabled: _enabled,
+                                decoration: const InputDecoration(
+                                  labelText: 'Minutes',
+                                  errorMaxLines: 3,
+                                ),
+                                keyboardType: TextInputType.number,
+                                textInputAction: TextInputAction.next,
+                                validator: (value) =>
+                                    _validateDurationPart(value, 'minutes', 59),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                              TextFormField(
+                                key: const Key('completed-seconds'),
+                                controller: _seconds,
+                                enabled: _enabled,
+                                decoration: const InputDecoration(
+                                  labelText: 'Seconds',
+                                  errorMaxLines: 3,
+                                ),
+                                keyboardType: TextInputType.number,
+                                textInputAction: TextInputAction.next,
+                                validator: _validateSeconds,
+                                onChanged: (_) => setState(() {}),
+                              ),
+                            ];
+                            if (constraints.maxWidth < 260 ||
+                                MediaQuery.textScalerOf(context).scale(14) >
+                                    20) {
+                              return Column(
+                                children: [
+                                  fields[0],
+                                  const SizedBox(height: 12),
+                                  fields[1],
+                                  const SizedBox(height: 12),
+                                  fields[2],
+                                ],
+                              );
+                            }
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: fields[0]),
+                                const SizedBox(width: 8),
+                                Expanded(child: fields[1]),
+                                const SizedBox(width: 8),
+                                Expanded(child: fields[2]),
+                              ],
+                            );
+                          },
                         ),
+                        const SizedBox(height: 8),
+                        const Text('Up to 2 hours total. Zero is allowed.'),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
                           key: ValueKey(_presetId),
