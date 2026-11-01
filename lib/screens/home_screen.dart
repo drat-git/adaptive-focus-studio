@@ -18,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  bool _savingSettings = false;
 
   Future<bool> _openPresetEditor([FocusPreset? preset]) async {
     return await Navigator.push<bool>(
@@ -50,7 +51,9 @@ class _HomeScreenState extends State<HomeScreen> {
         onOpenHistory: () => setState(() => _selectedIndex = 1),
       ),
       const HistoryScreen(),
-      const SettingsScreen(),
+      SettingsScreen(
+        onSavingChanged: (saving) => setState(() => _savingSettings = saving),
+      ),
     ];
     final colors = Theme.of(context).colorScheme;
 
@@ -63,11 +66,13 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: colors.surface,
         selectedItemColor: colors.primary,
         unselectedItemColor: colors.onSurfaceVariant,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: _savingSettings
+            ? null
+            : (index) {
+                setState(() {
+                  _selectedIndex = index;
+                });
+              },
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.bookmarks_outlined),
