@@ -50,7 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onOpenSession: _openFocusSession,
         onOpenHistory: () => setState(() => _selectedIndex = 1),
       ),
-      const HistoryScreen(),
+      HistoryScreen(onOpenPresets: () => setState(() => _selectedIndex = 0)),
       SettingsScreen(
         onSavingChanged: (saving) => setState(() => _savingSettings = saving),
       ),

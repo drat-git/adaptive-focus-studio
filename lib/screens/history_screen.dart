@@ -4,11 +4,13 @@ import '../data/database_helper.dart';
 import '../models/focus_preset.dart';
 import '../models/session_log.dart';
 import '../widgets/display_widgets.dart';
+import 'session_log_editor.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key, this.databaseHelper});
+  const HistoryScreen({super.key, this.databaseHelper, this.onOpenPresets});
 
   final DatabaseHelper? databaseHelper;
+  final VoidCallback? onOpenPresets;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -18,11 +20,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
   late final DatabaseHelper _database;
   List<SessionLog> _logs = [];
   Map<int, String> _presetNames = {};
+  List<FocusPreset> _presets = [];
   String _mood = 'All moods';
   int _finishedCount = 0;
   double? _averageSeconds;
   bool _loading = false;
   String? _error;
+  bool _adding = false;
 
   @override
   void initState() {
@@ -45,6 +49,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       );
       if (!mounted) return;
       setState(() {
+        _presets = presets;
         _presetNames = {for (final preset in presets) preset.id!: preset.label};
         _logs = logs;
         _finishedCount = summary['count'] as int;
@@ -58,6 +63,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _error = 'Could not load session history. Try again.';
       });
     }
+  }
+
+  Future<void> _addManualEntry() async {
+    if (_adding || _loading || _error != null) return;
+    _adding = true;
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => SessionLogEditor(
+        presets: _presets,
+        saveLog: _database.insertSessionLog,
+        onOpenPresets: widget.onOpenPresets,
+      ),
+    );
+    _adding = false;
+    if (mounted && saved == true) _load();
   }
 
   String _localDateTime(int timestamp) {
@@ -118,6 +139,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
           title: 'Session history',
           description: 'Review planned and completed study time.',
         ),
+        FilledButton.icon(
+          onPressed: _loading || _error != null ? null : _addManualEntry,
+          icon: const Icon(Icons.add),
+          label: const Text('Add manual entry'),
+        ),
+        const SizedBox(height: 16),
         const Text('Mood at session'),
         DropdownButton<String>(
           value: _mood,
