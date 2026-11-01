@@ -11,7 +11,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.history));
     await tester.pumpAndSettle();
-    expect(find.text('Session records will appear here.'), findsOneWidget);
+    expect(find.text('Session history'), findsOneWidget);
     expect(find.text('Study presets'), findsNothing);
 
     await tester.tap(find.byIcon(Icons.settings_outlined));
